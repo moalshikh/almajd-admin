@@ -2469,7 +2469,7 @@ var qrcode = function() {
 <script>
 /* ===================== التخزين ===================== */
 const LS='adminSys_cloud_v1';
-const DEF={school:'مدارس المجد الجديد الأهلية',edu:'الإدارة العامة للتعليم بمنطقة حائل',principal:'',deputy:'',grades:'1,2,3',sections:7,start:'07:00',tstart:'06:45',threshold:3,lateThreshold:3,termStart:'',lastBackup:'',wa_on:false,wa_mods:'perm',
+const DEF={school:'مدارس المجد الجديد الأهلية',edu:'الإدارة العامة للتعليم بمنطقة حائل',principal:'',deputy:'',grades:'1,2,3',sections:7,start:'07:00',tstart:'06:45',threshold:3,lateThreshold:3,termStart:'',lastBackup:'',wa_on:false,wa_mods:'perm',svc:'',
  vdegrees:'الدرجة الأولى,الدرجة الثانية,الدرجة الثالثة,الدرجة الرابعة,الدرجة الخامسة,الدرجة السادسة',
  tpl_absence:'السلام عليكم ورحمة الله وبركاته\nولي أمر الطالب/ {الاسم} المحترم\nنفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}م الموافق {الهجري}.\nنأمل إفادة المدرسة بالعذر إن وجد، شاكرين تعاونكم.\n{المدرسة}',
  tpl_late:'السلام عليكم ورحمة الله وبركاته\nولي أمر الطالب/ {الاسم} المحترم\nنفيدكم بتأخر ابنكم عن الحضور للمدرسة اليوم {اليوم} {التاريخ}م، حيث حضر الساعة {الوقت} متأخراً {الدقائق} دقيقة.\nنأمل الحرص على الحضور المبكر، شاكرين تعاونكم.\n{المدرسة}',
@@ -2667,9 +2667,19 @@ const TST=['حاضر','متأخر','غائب','إجازة','مكلف بمهمة'
 /* ===================== الحالة والتنقل ===================== */
 let view='home',curDate=today(),pending=null,rosterTab='students',rosterQ='';
 let rep={mod:'absence',period:'week',date:today(),from:'',to:'',details:true};
-function go(v){view=v;render();window.scrollTo(0,0)}
+const SVC=[['absence','🗓️ تسجيل الغياب'],['late','⏰ تسجيل المتأخرين'],['perm','🚶 الاستئذان (النموذج الكامل)'],['behavior','⚠️ المخالفات السلوكية'],['pledge','📝 التعهدات'],['visitors','🚪 سجل الزوار'],['teachers','👨‍🏫 حضور المعلمين'],['reports','📊 التقارير']];
+const svcList=()=>String(DB.settings.svc||'').split(',').filter(Boolean);
+const svcOn=k=>!SVC.some(x=>x[0]===k)||svcList().includes(k);
+function setSvc(k,on){const m=new Set(svcList());on?m.add(k):m.delete(k);DB.settings.svc=SVC.map(x=>x[0]).filter(x=>m.has(x)).join(',');save();render();toast(on?'تم تفعيل الخدمة ✓':'تم تعطيل الخدمة')}
+function setAllSvc(on){DB.settings.svc=on?SVC.map(x=>x[0]).join(','):'';save();render();toast(on?'تم تفعيل كل الخدمات ✓':'تم تعطيل كل الخدمات عدا بوابة الخروج')}
+function svcCard(){return `<div class="card"><h3>🧩 الخدمات المفعّلة</h3><p class="hint" style="margin-top:-6px">الخدمة المعطّلة تختفي من القائمة والرئيسية عند جميع الإداريين، وسجلاتها السابقة تبقى محفوظة وتعود عند التفعيل. <b>بوابة الخروج</b> تعمل دائماً.</p>
+ <div class="rctl" style="margin-top:10px">${SVC.map(([k,l])=>`<label><input type="checkbox" ${svcOn(k)?'checked':''} onchange="setSvc('${k}',this.checked)"> ${l}</label>`).join('')}</div>
+ <div class="mact"><button class="btn" onclick="setAllSvc(true)">تفعيل الكل</button><button class="btn" onclick="setAllSvc(false)">تعطيل الكل عدا بوابة الخروج</button></div></div>`}
+function go(v){if(!svcOn(v)){toast('هذه الخدمة معطّلة حالياً','err');return}view=v;render();window.scrollTo(0,0)}
 function render(){
- document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===view));
+ if(!svcOn(view))view='home';
+ document.querySelectorAll('.nav button').forEach(b=>{b.classList.toggle('on',b.dataset.v===view);b.style.display=svcOn(b.dataset.v)?'':'none'});
+ {const h=document.querySelector('.nav hr');if(h)h.style.display=svcList().some(k=>k!=='reports')?'':'none'}
  $('#brand small').textContent=DB.settings.school;
  const app=$('#app');
  if(view==='home')app.innerHTML=homeView();
@@ -2724,6 +2734,7 @@ const QA=[['absence','#0f766e','تسجيل غائب'],['late','#b45309','تسج�
 function quickSum(r){return quickSum0(r)+(r.by?' · '+r.by:'')}
 function quickSum0(r){const m=r.mod;return m==='absence'?r.excuse:m==='late'?`${r.time||''} · ${r.mins||0} د`:m==='perm'?`${r.time||''} · ${r.reason||''}`:m==='behavior'?r.violation:m==='pledge'?`${r.type} · ${r.level}`:`${r.purpose||''} · ${r.tin||''}`}
 function quickModal(mod){
+ if(!svcOn(mod))return toast('هذه الخدمة معطّلة حالياً','err');
  window._qMod=mod;window._waMod=null;
  const m=MODS[mod],t=today(),recs=dayRecords(mod,t).sort((a,b)=>(b.created||0)-(a.created||0));
  openModal(`<div class="tbar"><h3 style="margin:0">${m.ic} ${m.t}</h3><span class="muted">${fmtDate(t)}</span></div>
@@ -3020,10 +3031,11 @@ function homeView(){
  return `<div class="head"><div><h1>أهلاً بك 👋</h1><p class="sub">${fmtDate(t)} · ${hijri(t)}</p></div>
  <div style="min-width:260px"><input list="dl_students" placeholder="🔍 ابحث عن طالب لعرض ملفه..." onchange="if(this.value)showProfile(this.value,'')"></div></div>
  ${isMgr()&&DB.records.length&&old?`<div class="alert">⚠️ ${bk?'آخر نسخة احتياطية قبل أكثر من أسبوع':'لم تأخذ نسخة احتياطية بعد'} — البيانات محفوظة في هذا المتصفح فقط. <button class="btn" onclick="exportJSON()">حفظ نسخة الآن</button></div>`:''}
- <div class="qa"><button class="qx" style="background:var(--dark)" onclick="go('exit')"><span class="badge">${day('perm').length}</span><span class="qi">🛂</span><span class="ql">بوابة الخروج</span><span class="qc">تسجيل خروج طالب وتنبيه الإدارة فوراً</span></button>${QA.map(([k,c,l])=>{const n=k==='teachers'?tr.filter(r=>['حاضر','متأخر','مكلف بمهمة'].includes(r.status)).length+'/'+DB.teachers.length:day(k).length;
+ <div class="qa"><button class="qx" style="background:var(--dark)" onclick="go('exit')"><span class="badge">${day('perm').length}</span><span class="qi">🛂</span><span class="ql">بوابة الخروج</span><span class="qc">تسجيل خروج طالب وتنبيه الإدارة فوراً</span></button>${QA.filter(([k])=>svcOn(k)).map(([k,c,l])=>{const n=k==='teachers'?tr.filter(r=>['حاضر','متأخر','مكلف بمهمة'].includes(r.status)).length+'/'+DB.teachers.length:day(k).length;
   const sub=k==='visitors'?vis.filter(v=>!v.tout).length+' داخل المدرسة الآن':k==='teachers'?'غائب '+tr.filter(r=>r.status==='غائب').length+' · إجازة '+tr.filter(r=>r.status==='إجازة').length:'اليوم';
   return `<button style="background:${c}" onclick="${k==='teachers'?"curDate=today();go('teachers')":`quickModal('${k}')`}"><span class="badge">${n}</span><span class="qi">${MODS[k].ic}</span><span class="ql">${l}</span><span class="qc">${sub}</span></button>`}).join('')}</div>
- <div class="rgrid">
+ ${svcList().length?'':`<p class="hint" style="margin:-6px 0 14px">باقي الخدمات معطّلة مؤقتاً${isMgr()?` — <a style="color:var(--pri);cursor:pointer" onclick="go('settings')">فعّلها من الإعدادات</a>`:''}.</p>`}
+ <div class="rgrid" ${svcOn('absence')||svcOn('late')?'':'style="display:none"'}>
  <div class="card"><h3>آخر ١٠ أيام دراسية</h3><div class="lg"><span><i style="background:var(--pri)"></i>غياب</span><span><i style="background:#f59e0b"></i>تأخر</span></div>
  <div class="cols">${ser.map(([x,a,l])=>`<div class="col"><div class="pair"><i title="غياب ${a}" style="height:${a/mx*100}%;background:var(--pri)"></i><i title="تأخر ${l}" style="height:${l/mx*100}%;background:#f59e0b"></i></div>${dayName(x).slice(0,3)}<br>${x.slice(8)}</div>`).join('')}</div></div>
  <div class="card"><h3>🔔 طلاب يحتاجون إجراء (${al.length})</h3><p class="hint" style="margin-top:-6px">غياب بدون عذر ≥ ${DB.settings.threshold} أو تأخر ≥ ${DB.settings.lateThreshold}${DB.settings.termStart?' منذ '+fmtShort(DB.settings.termStart):''}</p>
@@ -3146,6 +3158,7 @@ function settingsView(){
  <div class="card"><h3>💬 نصوص رسائل واتساب</h3><p class="hint" style="margin-top:-6px">المتغيرات المتاحة: {الاسم} {الفصل} {التاريخ} {الهجري} {اليوم} {الوقت} {الدقائق} {السبب} {المستلم} {المخالفة} {الإجراء} {النوع} {المدرسة}</p>
  <div class="form">${[['absence','رسالة الغياب'],['late','رسالة التأخر'],['perm','رسالة الاستئذان'],['behavior','رسالة المخالفة'],['pledge','رسالة التعهد']].map(([k,l])=>`<label><span>${l}</span><textarea rows="7" onchange="DB.settings['tpl_${k}']=this.value;save();toast('تم الحفظ ✓')">${esc(s['tpl_'+k])}</textarea></label>`).join('')}</div>
  <div class="mact"><button class="btn" onclick="if(confirm('إرجاع النصوص الافتراضية؟')){['absence','late','perm','behavior','pledge'].forEach(k=>DB.settings['tpl_'+k]=DEF['tpl_'+k]);save();render()}">إرجاع النصوص الافتراضية</button></div></div>
+ ${isMgr()?svcCard():''}
  ${isMgr()?waSettingsCard():''}
  ${isMgr()?`<div class="card"><h3>👥 الإداريون وباركود الدخول</h3><p class="hint" style="margin-top:-6px">أضف كل إداري ليحصل على باركود دخول خاص به. كل تسجيل يُحفظ باسم من سجّله.</p>
  ${/^https?:$/.test(location.protocol)?'':`<div class="form" style="margin-bottom:10px">${inp('siteUrl','رابط الموقع (مطلوب لإنشاء الباركود)')}</div>`}
