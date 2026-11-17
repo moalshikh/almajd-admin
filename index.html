@@ -91,6 +91,14 @@ a.nm{color:inherit;text-decoration:none;border-bottom:1px dashed #9aa;cursor:poi
 #modal .box{background:#fff;border-radius:16px;padding:20px;width:min(760px,100%);max-height:90vh;overflow:auto}
 #modal h3{margin:0 0 14px}
 .mact{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.exq{font-size:18px;padding:13px 14px}
+.exlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-top:12px}
+.exs{font:inherit;display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--line);background:#fff;border-radius:12px;padding:14px;cursor:pointer;text-align:right;color:inherit;font-size:16px}
+.exs:hover,.exs:active{border-color:var(--pri);background:var(--pri2)}
+.exl{font-size:13px;color:var(--mut);margin:14px 0 6px}
+.chip.xl{font-size:15px;padding:9px 16px;margin:3px}
+.btn.exgo{padding:13px 18px;font-size:16px;flex:1}
+.tag.ok{background:#dcfce7;color:#166534}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dark);color:#fff;padding:10px 18px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none;z-index:60;font-size:14px}
 #toast.show{opacity:1}#toast.err{background:var(--red)}
 .pledge{font-size:16px;line-height:2.2}.pledge p{margin:12px 0;text-align:justify}
@@ -127,6 +135,7 @@ a.nm{color:inherit;text-decoration:none;border-bottom:1px dashed #9aa;cursor:poi
   <hr>
   <button data-v="absence" onclick="go('absence')">🗓️ تسجيل الغياب</button>
   <button data-v="late" onclick="go('late')">⏰ تسجيل المتأخرين</button>
+  <button data-v="exit" onclick="go('exit')">🛂 بوابة الخروج</button>
   <button data-v="perm" onclick="go('perm')">🚶 الاستئذان</button>
   <button data-v="behavior" onclick="go('behavior')">⚠️ المخالفات السلوكية</button>
   <button data-v="pledge" onclick="go('pledge')">📝 التعهدات</button>
@@ -2451,7 +2460,7 @@ var qrcode = function() {
 <script>
 /* ===================== التخزين ===================== */
 const LS='adminSys_cloud_v1';
-const DEF={school:'مدارس المجد الجديد الأهلية',edu:'الإدارة العامة للتعليم بمنطقة حائل',principal:'',deputy:'',grades:'1,2,3',sections:7,start:'07:00',tstart:'06:45',threshold:3,lateThreshold:3,termStart:'',lastBackup:'',
+const DEF={school:'مدارس المجد الجديد الأهلية',edu:'الإدارة العامة للتعليم بمنطقة حائل',principal:'',deputy:'',grades:'1,2,3',sections:7,start:'07:00',tstart:'06:45',threshold:3,lateThreshold:3,termStart:'',lastBackup:'',wa_on:false,wa_mods:'perm',
  vdegrees:'الدرجة الأولى,الدرجة الثانية,الدرجة الثالثة,الدرجة الرابعة,الدرجة الخامسة,الدرجة السادسة',
  tpl_absence:'السلام عليكم ورحمة الله وبركاته\nولي أمر الطالب/ {الاسم} المحترم\nنفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}م الموافق {الهجري}.\nنأمل إفادة المدرسة بالعذر إن وجد، شاكرين تعاونكم.\n{المدرسة}',
  tpl_late:'السلام عليكم ورحمة الله وبركاته\nولي أمر الطالب/ {الاسم} المحترم\nنفيدكم بتأخر ابنكم عن الحضور للمدرسة اليوم {اليوم} {التاريخ}م، حيث حضر الساعة {الوقت} متأخراً {الدقائق} دقيقة.\nنأمل الحرص على الحضور المبكر، شاكرين تعاونكم.\n{المدرسة}',
@@ -2659,7 +2668,8 @@ function render(){
  else if(MODS[view])app.innerHTML=modView(view);
  else if(view==='reports'){app.innerHTML=reportsView();runReport()}
  else if(view==='roster')app.innerHTML=rosterView();
- else if(view==='settings'){app.innerHTML=settingsView();if(isMgr())loadAdmins()}
+ else if(view==='exit'){app.innerHTML=exitView();exitList()}
+ else if(view==='settings'){app.innerHTML=settingsView();if(isMgr()){loadAdmins();waInfo()}}
  refreshLists();bindAfter();
 }
 function refreshLists(){$('#dl_students').innerHTML=DB.students.map(s=>`<option value="${esc(s.name)}">${esc(s.cls)}</option>`).join('')}
@@ -2757,6 +2767,7 @@ function addRecord(mod,pre='q_'){
  const r={id:uid(),mod,date,...o,created:Date.now(),by:myName()};
  if(mod==='late')r.mins=lateMins(o.time,DB.settings.start);
  DB.records.push(r);if(MODS[mod].kind==='student')learnStudent(o);save();
+ notifyGroup(r);
  if(inModal)quickModal(mod);else render();
  toast('تمت الإضافة ✓'+(mod==='late'&&r.mins?' · متأخر '+r.mins+' دقيقة':''));
  if(mod==='pledge'&&confirm('هل تريد طباعة التعهد الآن؟'))printPledge(r.id);
@@ -2785,6 +2796,106 @@ function waList(mod){
 }
 function waBack(){window._waMod=null;if(window._qMod)quickModal(window._qMod);else{closeModal();render()}
 }
+/* ===================== تنبيهات واتساب لقروب الإدارة + بوابة الخروج ===================== */
+const WA_MODS=[['perm','الاستئذان وخروج الطلاب'],['late','التأخر'],['behavior','المخالفات السلوكية'],['pledge','التعهدات'],['visitors','الزوار']];
+const WA_HEAD={perm:'🚶 *خروج طالب*',late:'⏰ *تأخر طالب*',behavior:'⚠️ *مخالفة سلوكية*',pledge:'📝 *تعهد طالب*',visitors:'🚪 *زائر للمدرسة*'};
+const waMods=()=>String(DB.settings.wa_mods||'').split(',').filter(Boolean);
+const waOn=mod=>!!DB.settings.wa_on&&waMods().includes(mod);
+function alertText(r){
+ const m=MODS[r.mod],L=[WA_HEAD[r.mod]||m.t],skip=['nat','rid','idno','phone','tout','points','relation','guardian'];
+ m.fields.forEach(f=>{
+  if(skip.includes(f.k))return;let v=r[f.k],l=f.l;
+  if(f.k==='name')l=m.kind==='visitor'?'الزائر':'الطالب';
+  if(f.k==='receiver'){v=[r.receiver,r.relation].filter(Boolean).join(' — ');l='المستلم'}
+  if(f.k==='time'&&r.mod==='late'&&r.mins)v=v+' (متأخر '+r.mins+' دقيقة)';
+  if(v)L.push(l+': '+v);
+ });
+ if(r.date!==today())L.push('التاريخ: '+fmtShort(r.date));
+ if(r.by)L.push('سجّله: '+r.by);
+ return L.join('\n');
+}
+function waErr(e){const t=String(e&&e.message||e);
+ return /wa_not_configured/.test(t)?'لم يُضبط ربط الواتساب بعد (الإعدادات)':/wa_disabled/.test(t)?'ربط الواتساب موقوف':/rate_limited/.test(t)?'رسائل كثيرة خلال دقيقة، انتظر قليلاً':/not_manager/.test(t)?'هذه العملية للمدير فقط':/app_wa_|PGRST202|Could not find/.test(t)?'لم يُركّب ملف SQL الخاص بالتنبيهات في Supabase':/Failed to fetch|NetworkError/.test(t)?'لا يوجد اتصال بالإنترنت':t}
+async function notifyGroup(r,force){
+ if(!waOn(r.mod)&&!(force&&DB.settings.wa_on))return;
+ try{
+  await rpc('app_wa_send',{p_token:META.token,p_text:alertText(r)});
+  const x=DB.records.find(y=>y.id===r.id);if(x){x.alerted=Date.now();save()}
+  toast('📣 أُرسل التنبيه لقروب الإدارة ✓');
+ }catch(e){toast('تعذر إرسال التنبيه: '+waErr(e),'err')}
+ if(view==='exit'&&!$('#modal').classList.contains('open'))render();
+}
+function reAlert(id){const r=DB.records.find(x=>x.id===id);if(r)notifyGroup(r,true)}
+
+let exitQ='';
+function exitView(){
+ const t=today(),recs=DB.records.filter(r=>r.mod==='perm'&&r.date===t).sort((a,b)=>(b.created||0)-(a.created||0));
+ return `<div class="head"><div><h1>🛂 بوابة الخروج</h1><p class="sub">ابحث عن الطالب واضغط على اسمه لتسجيل خروجه · ${fmtDate(t)}</p></div></div>
+ ${DB.settings.wa_on?'':`<div class="alert">⚠️ تنبيهات الواتساب غير مفعّلة — الخروج يُسجَّل لكن لا يصل تنبيه للإدارة. ${isMgr()?`<button class="btn" onclick="go('settings')">فتح الإعدادات</button>`:'اطلب من المدير تفعيلها.'}</div>`}
+ <div class="card"><input id="ex_q" class="exq" placeholder="🔍 اكتب اسم الطالب..." value="${esc(exitQ)}" oninput="exitQ=this.value;exitList()" autocomplete="off"><div id="ex_list" class="exlist"></div></div>
+ <div class="card"><h3>خرجوا اليوم (${recs.length})</h3>
+ ${recs.length?`<div class="tw"><table class="qlist"><tbody>${recs.map(r=>`<tr><td><b>${esc(r.name)}</b></td><td><span class="cls">${esc(r.cls)}</span></td><td class="muted">${esc([r.time,r.reason,[r.receiver,r.relation].filter(Boolean).join(' — ')].filter(Boolean).join(' · '))}</td><td style="white-space:nowrap;text-align:left">${r.alerted?'<span class="tag ok">📣 أُرسل التنبيه</span>':DB.settings.wa_on?`<button class="btn" style="padding:4px 10px;font-size:13px" onclick="reAlert('${r.id}')">📣 إرسال التنبيه</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty" style="padding:16px">لم يخرج أحد اليوم</div>'}</div>`;
+}
+function exitList(){
+ const el=$('#ex_list');if(!el)return;const q=norm(exitQ).split(' ').filter(Boolean);
+ if(q.join('').length<2){el.innerHTML='<p class="hint">اكتب حرفين على الأقل من اسم الطالب</p>';return}
+ const L=DB.students.filter(s=>{const n=norm(s.name);return q.every(w=>n.includes(w))}).sort(byClass).slice(0,18);
+ el.innerHTML=L.length?L.map(s=>`<button class="exs" onclick="exitPick('${s.id}')"><b>${esc(s.name)}</b><span class="cls">${esc(s.cls)}</span></button>`).join(''):'<div class="empty" style="padding:14px">لا يوجد طالب بهذا الاسم في القائمة</div>';
+}
+function exitPick(id){const s=DB.students.find(x=>x.id===id);if(!s)return;window._ex={s,reason:'',relation:'',receiver:''};exitModal()}
+function exitModal(){
+ const e=window._ex,opts=k=>MODS.perm.fields.find(f=>f.k===k).opts;
+ const chips=k=>opts(k).map((o,i)=>`<button class="chip xl ${e[k]===o?'on s3':''}" onclick="exitSet('${k}',${i})">${o}</button>`).join('');
+ const dup=DB.records.some(r=>r.mod==='perm'&&r.date===today()&&norm(r.name)===norm(e.s.name));
+ openModal(`<h3 style="margin:0 0 4px">${esc(e.s.name)} <span class="cls">${esc(e.s.cls)}</span></h3>
+ ${dup?'<p class="warn" style="margin:6px 0">⚠️ هذا الطالب مسجّل خروجه اليوم مسبقاً</p>':''}
+ <p class="exl">سبب الخروج *</p><div>${chips('reason')}</div>
+ <p class="exl">المستلم</p><div>${chips('relation')}</div>
+ <label style="display:block;margin-top:12px"><span>اسم المستلم (اختياري)</span><input id="ex_recv" value="${esc(e.receiver)}" oninput="window._ex.receiver=this.value"></label>
+ <div class="mact"><button class="btn pri exgo" onclick="exitSave()">✅ تسجيل الخروج وتنبيه الإدارة</button><button class="btn" onclick="closeModal()">إلغاء</button></div>`);
+}
+function exitSet(k,i){const e=window._ex,o=MODS.perm.fields.find(f=>f.k===k).opts[i];e[k]=e[k]===o?'':o;exitModal()}
+function exitSave(){
+ const e=window._ex;if(!e)return;if(!e.reason)return toast('اختر سبب الخروج','err');
+ const r={id:uid(),mod:'perm',date:today(),name:e.s.name,cls:e.s.cls,nat:e.s.nat||'',time:nowTime(),reason:e.reason,receiver:String(e.receiver||'').trim().replace(/\s+/g,' '),relation:e.relation||'',rid:'',note:'',created:Date.now(),by:myName(),gate:1};
+ DB.records.push(r);save();window._ex=null;exitQ='';closeModal();render();toast('تم تسجيل الخروج ✓');notifyGroup(r,true);
+}
+
+/* ---------- إعداد ربط الواتساب (للمدير) ---------- */
+function waSettingsCard(){
+ const s=DB.settings,mods=waMods();
+ return `<div class="card"><h3>📣 تنبيهات واتساب لقروب الإدارة</h3><p class="hint" style="margin-top:-6px">عند تسجيل خروج طالب (أو أي قسم تختاره) تصل رسالة فورية لقروب الإدارة عبر رقم المدرسة.</p>
+ <div class="rctl"><label><input type="checkbox" ${s.wa_on?'checked':''} onchange="DB.settings.wa_on=this.checked;save();render()"> <b>تفعيل التنبيهات</b></label></div>
+ <p class="exl">الأقسام التي ترسل تنبيهاً:</p><div class="rctl">${WA_MODS.map(([k,l])=>`<label><input type="checkbox" ${mods.includes(k)?'checked':''} onchange="waMod('${k}',this.checked)"> ${l}</label>`).join('')}</div>
+ <p class="exl">ربط السيرفر (Evolution API) — يُحفظ في السحابة ولا يظهر المفتاح بعد حفظه:</p>
+ <div class="form"><label><span>رابط السيرفر</span><input id="wa_url" dir="ltr" placeholder="http://IP:PORT"></label><label><span>اسم الـ instance</span><input id="wa_inst" dir="ltr"></label><label><span>معرّف القروب</span><input id="wa_grp" dir="ltr" placeholder="1203...@g.us"></label><label><span>مفتاح الـ API <small id="wa_keyst" class="muted"></small></span><input id="wa_key" type="password" dir="ltr" autocomplete="new-password" placeholder="فارغ = المفتاح الحالي"></label></div>
+ <div class="mact"><button class="btn pri" onclick="waSetup()">💾 حفظ الربط</button><button class="btn" onclick="waTest()">📨 إرسال رسالة تجربة</button><button class="btn" onclick="waRecent()">📋 آخر التنبيهات وحالتها</button></div>
+ <div id="waRecent" style="margin-top:12px"></div></div>`;
+}
+function waMod(k,on){const m=new Set(waMods());on?m.add(k):m.delete(k);DB.settings.wa_mods=[...m].join(',');save();toast('تم الحفظ ✓')}
+async function waInfo(){
+ if(!$('#wa_url'))return;
+ try{const c=await rpc('app_wa_info',{p_token:META.token});if(!$('#wa_url'))return;
+  $('#wa_url').value=c.base_url||'';$('#wa_inst').value=c.instance||'';$('#wa_grp').value=c.group_jid||'';$('#wa_keyst').textContent=c.has_key?'(محفوظ ✓)':'(لم يُحفظ بعد)'}
+ catch(e){if($('#wa_keyst'))$('#wa_keyst').textContent='';if($('#waRecent'))$('#waRecent').innerHTML=`<p class="warn">${esc(waErr(e))}</p>`}
+}
+async function waSetup(){
+ const a={p_token:META.token,p_base_url:$('#wa_url').value.trim(),p_instance:$('#wa_inst').value.trim(),p_group:$('#wa_grp').value.trim(),p_apikey:$('#wa_key').value.trim()};
+ if(!a.p_base_url||!a.p_instance||!a.p_group)return toast('أكمل رابط السيرفر واسم الـ instance ومعرّف القروب','err');
+ try{await rpc('app_wa_setup',a);$('#wa_key').value='';toast('تم حفظ الربط ✓');waInfo()}catch(e){toast(waErr(e),'err')}
+}
+async function waTest(){
+ try{await rpc('app_wa_send',{p_token:META.token,p_text:'✅ *رسالة تجربة*\nنظام الشؤون الإدارية — '+DB.settings.school+'\nالمرسل: '+myName()});toast('أُرسلت رسالة التجربة — تحقق من القروب');setTimeout(waRecent,4000)}
+ catch(e){toast(waErr(e),'err')}
+}
+async function waRecent(){
+ const el=$('#waRecent');if(!el)return;
+ try{const L=await rpc('app_wa_recent',{p_token:META.token});
+  const st=x=>x.status_code>=200&&x.status_code<300?'<span class="tag ok">✅ أُرسلت</span>':x.status_code?`<span class="warn">❌ رفضها السيرفر (${x.status_code})</span>`:x.timed_out||x.error_msg?`<span class="warn">❌ السيرفر لا يستجيب</span>`:'<span class="muted">⏳ قيد الإرسال</span>';
+  el.innerHTML=L.length?`<div class="tw"><table><thead><tr><th>الوقت</th><th>المرسل</th><th>الرسالة</th><th>الحالة</th></tr></thead><tbody>${L.map(x=>{const d=new Date(x.at);return `<tr><td class="muted" style="white-space:nowrap">${fmtShort(iso(d))} ${d.toTimeString().slice(0,5)}</td><td>${esc(x.by_name||'')}</td><td class="muted">${esc(String(x.body||'').replace(/\n/g,' · '))}</td><td style="white-space:nowrap">${st(x)}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="muted">لا توجد تنبيهات بعد</p>';
+ }catch(e){el.innerHTML=`<p class="warn">${esc(waErr(e))}</p>`}
+}
+
 function printPerm(id){
  const r=DB.records.find(x=>x.id===id),k=norm(r.name),n=DB.records.filter(x=>x.mod==='perm'&&norm(x.name)===k&&x.date<=r.date).length;
  printHTML(`<div class="report pledge">${rHead('إذن خروج طالب',fmtDate(r.date),hijri(r.date))}
@@ -3022,6 +3133,7 @@ function settingsView(){
  <div class="card"><h3>💬 نصوص رسائل واتساب</h3><p class="hint" style="margin-top:-6px">المتغيرات المتاحة: {الاسم} {الفصل} {التاريخ} {الهجري} {اليوم} {الوقت} {الدقائق} {السبب} {المستلم} {المخالفة} {الإجراء} {النوع} {المدرسة}</p>
  <div class="form">${[['absence','رسالة الغياب'],['late','رسالة التأخر'],['perm','رسالة الاستئذان'],['behavior','رسالة المخالفة'],['pledge','رسالة التعهد']].map(([k,l])=>`<label><span>${l}</span><textarea rows="7" onchange="DB.settings['tpl_${k}']=this.value;save();toast('تم الحفظ ✓')">${esc(s['tpl_'+k])}</textarea></label>`).join('')}</div>
  <div class="mact"><button class="btn" onclick="if(confirm('إرجاع النصوص الافتراضية؟')){['absence','late','perm','behavior','pledge'].forEach(k=>DB.settings['tpl_'+k]=DEF['tpl_'+k]);save();render()}">إرجاع النصوص الافتراضية</button></div></div>
+ ${isMgr()?waSettingsCard():''}
  ${isMgr()?`<div class="card"><h3>👥 الإداريون وباركود الدخول</h3><p class="hint" style="margin-top:-6px">أضف كل إداري ليحصل على باركود دخول خاص به. كل تسجيل يُحفظ باسم من سجّله.</p>
  ${/^https?:$/.test(location.protocol)?'':`<div class="form" style="margin-bottom:10px">${inp('siteUrl','رابط الموقع (مطلوب لإنشاء الباركود)')}</div>`}
  <div class="add-grid"><label class="wide"><span>اسم الإداري</span><input id="ad_name"></label><label><span>الصلاحية</span><select id="ad_role"><option value="staff">إداري</option><option value="manager">مدير (يضيف الإداريين)</option></select></label><button class="btn pri" onclick="addAdmin()">＋ إضافة وإنشاء باركود</button></div>
