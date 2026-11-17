@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>نظام الشؤون الإدارية</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0c3b36">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="الشؤون الإدارية">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f3f6f5;--card:#fff;--ink:#16211f;--mut:#6b7a76;--line:#e2e8e6;--pri:#0f766e;--pri2:#e6f3f1;--dark:#0c3b36;--red:#c2410c;--amb:#b45309;--rad:14px}
@@ -3138,6 +3146,7 @@ function settingsView(){
  ${/^https?:$/.test(location.protocol)?'':`<div class="form" style="margin-bottom:10px">${inp('siteUrl','رابط الموقع (مطلوب لإنشاء الباركود)')}</div>`}
  <div class="add-grid"><label class="wide"><span>اسم الإداري</span><input id="ad_name"></label><label><span>الصلاحية</span><select id="ad_role"><option value="staff">إداري</option><option value="manager">مدير (يضيف الإداريين)</option></select></label><button class="btn pri" onclick="addAdmin()">＋ إضافة وإنشاء باركود</button></div>
  <div id="admList" style="margin-top:12px"><p class="muted">جاري التحميل...</p></div></div>`:''}
+ ${installCard()}
  <div class="card"><h3>☁️ المزامنة</h3><p class="hint" style="margin-top:-6px">البيانات محفوظة في السحابة ومتزامنة بين كل الأجهزة، وتعمل حتى لو انقطع الإنترنت ثم تُرفع تلقائياً. مسجّل باسم: <b>${esc(myName())}</b></p><div class="mact"><button class="btn" onclick="syncNow();toast('جاري المزامنة...')">🔄 مزامنة الآن</button><button class="btn danger" onclick="if(confirm('تسجيل الخروج من هذا الجهاز؟ ستحتاج الباركود للدخول مرة أخرى.'))logout()">تسجيل الخروج من هذا الجهاز</button></div></div>
  <div class="card"><h3>💾 النسخ الاحتياطي</h3><p class="hint" style="margin-top:-6px">نسخة إضافية على جهازك للاحتياط. لنقل بيانات النسخة القديمة (غير المتصلة): خذ منها نسخة احتياطية ثم استعدها هنا. آخر نسخة: <b>${s.lastBackup?fmtShort(s.lastBackup):'لا يوجد'}</b> · عدد السجلات: <b>${DB.records.length}</b></p>
  <div class="mact"><button class="btn pri" onclick="exportJSON()">⬇ حفظ نسخة احتياطية</button><label class="btn" style="display:inline-block">⬆ استعادة نسخة<input type="file" accept=".json" style="display:none" onchange="importJSON(this.files[0])"></label><button class="btn" onclick="exportAll()">⬇ تصدير كل السجلات Excel</button>${isMgr()?'<button class="btn danger" onclick="wipe()">مسح كل البيانات</button>':''}</div></div>`;
@@ -3146,6 +3155,21 @@ function exportJSON(){DB.settings.lastBackup=today();save();download(new Blob([J
 function importJSON(f){if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const d=JSON.parse(rd.result);if(!Array.isArray(d.records))throw 0;if(!confirm(`استبدال البيانات الحالية بالنسخة (${d.records.length} سجل)؟`))return;DB=fixDB(d);save();render();toast('تمت الاستعادة ✓ — جاري رفعها للسحابة')}catch(e){toast('ملف غير صالح','err')}};rd.readAsText(f)}
 function exportAll(){Object.keys(MODS).forEach((k,i)=>setTimeout(()=>{const r=DB.records.filter(x=>x.mod===k).sort((a,b)=>a.date<b.date?-1:1);if(r.length)csv(modRows(k,r),'كل-'+MODS[k].short)},i*400))}
 function wipe(){if(!confirm('سيتم حذف كل السجلات والأسماء نهائياً. متأكد؟'))return;if(prompt('اكتب: حذف')!=='حذف')return;DB=fixDB(null);save();render();toast('تم المسح')}
+
+/* ===================== التطبيق (PWA) ===================== */
+let _inst=null;
+const isStandalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+const isIOS=()=>/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_inst=e;if(view==='settings')render()});
+window.addEventListener('appinstalled',()=>{_inst=null;toast('تم تثبيت التطبيق ✓');if(view==='settings')render()});
+function installCard(){
+ if(isStandalone())return `<div class="card"><h3>📲 التطبيق</h3><p class="hint" style="margin-top:-6px">أنت تستخدم النظام كتطبيق مثبّت على هذا الجهاز ✓</p></div>`;
+ return `<div class="card"><h3>📲 تثبيت النظام كتطبيق</h3><p class="hint" style="margin-top:-6px">يظهر بأيقونة على الشاشة الرئيسية ويفتح بملء الشاشة بدون شريط المتصفح، ويعمل حتى عند انقطاع الإنترنت.</p>
+ ${_inst?`<div class="mact"><button class="btn pri" onclick="installApp()">📲 تثبيت التطبيق</button></div>`:isIOS()?`<p style="line-height:1.9;margin:10px 0 0">على الآيفون: افتح النظام من <b>Safari</b> ← زر المشاركة <b>⬆️</b> ← <b>إضافة إلى الشاشة الرئيسية</b>.<br>بعد فتح التطبيق أول مرة، الصق رابط الدخول الخاص بك (مرة واحدة فقط).</p>`:`<p style="line-height:1.9;margin:10px 0 0">من قائمة المتصفح (⋮) اختر <b>تثبيت التطبيق</b> أو <b>إضافة إلى الشاشة الرئيسية</b>.</p>`}</div>`;
+}
+async function installApp(){if(!_inst)return;_inst.prompt();try{await _inst.userChoice}catch(e){}_inst=null;render()}
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+{const m=location.search.match(/[?&]v=(\w+)/);if(m&&(m[1]==='exit'||MODS[m[1]]))view=m[1]}
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 boot();
